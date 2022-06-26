@@ -4,7 +4,6 @@
 #include <string>
 #include "Message.h"
 
-
 #pragma warning(disable : 4996)
 
 HANDLE toRead;
@@ -13,6 +12,16 @@ HANDLE mutex;
 int readPosition = 0;
 int sizeOfQueue;
 
+std::string GetExeFileName() {
+	char buffer[MAX_PATH];
+	GetModuleFileName(NULL, buffer, MAX_PATH);
+	return std::string(buffer);
+}
+
+std::string GetExePath() {
+	std::string f = GetExeFileName();
+	return f.substr(0, f.find_last_of("\\/"));
+}
 
 void createBinaryFile(char* filename, int queueSize) {
 	std::ofstream fout(filename, std::ios::binary);
@@ -29,7 +38,6 @@ void createBinaryFile(char* filename, int queueSize) {
 
 void read(char* filename) {
 	WaitForSingleObject(toRead, INFINITE);
-	WaitForSingleObject(mutex, INFINITE);
 	std::cout << "Message read position: " << readPosition << std::endl;
 
 	std::fstream fin(filename, std::ios::binary | std::ios::in | std::ios::out);
@@ -56,10 +64,35 @@ void read(char* filename) {
 	}
 
 	fin.close();
-	ReleaseMutex(mutex);
+
 	ReleaseSemaphore(toWrite, 1, NULL);
 }
 
+void runSenderProcesses(char* filename, int amountOfSenderProcesses) {
+	STARTUPINFO* si = new STARTUPINFO[amountOfSenderProcesses];
+	PROCESS_INFORMATION* pi = new PROCESS_INFORMATION[amountOfSenderProcesses];
+	char data[50] = "Sender ";
+	strcat(data, filename);
+	strcat(data, " ");
+	char num[10];
+	strcpy(num, std::to_string(sizeOfQueue).c_str());
+	strcat(data, num);
+
+	char path[200];
+	strcpy(path, GetExePath().c_str());
+	strcat(path, "\\Sender.exe");
+
+	for (int i = 0; i < amountOfSenderProcesses; i++) {
+		ZeroMemory(&si[i], sizeof(STARTUPINFO));
+		si[i].cb = sizeof(STARTUPINFO);
+
+		if (!CreateProcess(NULL, data, NULL, NULL, FALSE, CREATE_NEW_CONSOLE, NULL, NULL, &si[i], &pi[i]))
+		{
+			std::cout << "The new process is not created.\n";
+			return;
+		}
+	}
+}
 
 int main() {
 	std::cout << "Enter file name:\n";
@@ -69,7 +102,7 @@ int main() {
 	std::cout << "Enter size of queue:\n";
 	std::cin >> sizeOfQueue;
 
-	std::cout << "Enter count of Sender processes:\n";
+	std::cout << "Enter amount of Sender processes:\n";
 	int amountOfSenderProcesses;
 	std::cin >> amountOfSenderProcesses;
 	toRead = CreateSemaphore(NULL, 0, sizeOfQueue, "Queue is full");
@@ -77,24 +110,7 @@ int main() {
 	mutex = CreateMutex(NULL, FALSE, "Mutex");
 
 	createBinaryFile(filename, sizeOfQueue);
-
-	STARTUPINFO* si = new STARTUPINFO[amountOfSenderProcesses];
-	PROCESS_INFORMATION* pi = new PROCESS_INFORMATION[amountOfSenderProcesses];
-	char data[50] = "Sender.exe ";
-	strcat(data, filename);
-	strcat(data, " ");
-	strcat(data, std::to_string(sizeOfQueue).c_str());
-
-	for (int i = 0; i < amountOfSenderProcesses; i++) {
-		ZeroMemory(&si[i], sizeof(STARTUPINFO));
-		si[i].cb = sizeof(STARTUPINFO);
-
-		if (!CreateProcess(NULL, data, NULL, NULL, FALSE, CREATE_NEW_CONSOLE, NULL, NULL, &si[i], &pi[i]))
-		{
-			std::cout << "The new process is not created.\n";
-			break;
-		}
-	}
+	runSenderProcesses(filename, amountOfSenderProcesses);
 
 	while (true) {
 		std::cout << "1 - Read\n2 - Exit\n";
@@ -105,12 +121,11 @@ int main() {
 			read(filename);
 		}
 		else if (key == 2) {
-			break;
+			return 0;
 		}
 	}
 
 	CloseHandle(toRead);
 	CloseHandle(toWrite);
 	CloseHandle(mutex);
-	return 0;
 }
