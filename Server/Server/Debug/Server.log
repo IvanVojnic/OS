@@ -1,3 +1,0 @@
-﻿  Server.cpp
-D:\OSi\lab5\Server\Server\Server.cpp(185,13): warning C4326: возвращаемый тип "main" должен быть "int", а не "void"
-  Server.vcxproj -> D:\OSi\lab5\Server\Debug\Server.exe
